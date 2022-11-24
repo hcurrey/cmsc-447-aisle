@@ -15,7 +15,7 @@
 
     <script type="text/javascript" src="js/jquery-1.7.2.js"></script>
     <script>
-      var shell = require('shell');
+      var shell = await import('shell');
       $(document).ready(function(){
         $(document).find('a').bind('click', function (e) {
           e.preventDefault();
