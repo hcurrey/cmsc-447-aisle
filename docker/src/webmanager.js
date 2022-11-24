@@ -7,14 +7,15 @@ const request = require('request-promise');
 const recipe_sites = ["https://natashaskitchen.com/?s=QUERY", "https://www.foodnetwork.com/search/QUERY-","https://www.thespruceeats.com/search?q=QUERY&searchType=recipe",
 "https://www.spendwithpennies.com/?s=QUERY","https://www.simplyrecipes.com/search?q=QUERY"] 
 
-var fallows = SearchForRecipe("apple pie");
-console.log(fallows);
+//simple test code 
+//const fallows = SearchForRecipe("apple pie");
+//fallows.then(console.log);
 
 //we're using request which is 'deprecated' but in the interest of getting this in a working state, we will be using request
 //time to use async since webreqs, cool :)
 async function SearchForRecipe(recipe)
 {
-    var recipes = []
+    var recipes = [];
     for (var i = 0; i < recipe_sites.length; i++)
     {
         try
@@ -22,7 +23,13 @@ async function SearchForRecipe(recipe)
             var siterecipes = await ParseRootPage(recipe, i);
             for (var x = 0; x < siterecipes.length; x++)
             {
-                recipes.push(siterecipes[x]);
+                siterecipes[x].then(function(result)
+                {
+                    recipes.push(result);
+                }, function(error)
+                {
+                    console.log("Failed to fetch a recipe");
+                });
             }
         }
         catch (e)
@@ -32,9 +39,9 @@ async function SearchForRecipe(recipe)
         finally
         {
             //no cleanups for now :)
+            return recipes;
         }
     }
-    return recipes;
 }
 
 function ParseRootPage(query, index)
