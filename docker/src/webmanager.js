@@ -7,20 +7,44 @@ const request = require('request-promise');
 const recipe_sites = ["https://natashaskitchen.com/?s=QUERY", "https://www.foodnetwork.com/search/QUERY-","https://www.thespruceeats.com/search?q=QUERY&searchType=recipe",
 "https://www.spendwithpennies.com/?s=QUERY","https://www.simplyrecipes.com/search?q=QUERY"] 
 
-SearchForRecipe("apple pie");
+var fallows = SearchForRecipe("apple pie");
+console.log(fallows);
 
 //we're using request which is 'deprecated' but in the interest of getting this in a working state, we will be using request
-function SearchForRecipe(recipe)
+//time to use async since webreqs, cool :)
+async function SearchForRecipe(recipe)
 {
+    var recipes = []
     for (var i = 0; i < recipe_sites.length; i++)
     {
-        ParseRootPage(recipe, i);
+        try
+        {
+            var siterecipes = await ParseRootPage(recipe, i);
+            for (var x = 0; x < siterecipes.length; x++)
+            {
+                recipes.push(siterecipes[x]);
+            }
+        }
+        catch (e)
+        {
+            console.log("Caught an error!");
+        }
+        finally
+        {
+            //no cleanups for now :)
+        }
     }
+    return recipes;
 }
 
 function ParseRootPage(query, index)
 {
-    request({method:'GET', uri:recipe_sites[index].replace("QUERY",query)}, (error, response, html) => {
+    return new Promise((resolve, reject) => {
+        var options = {
+            method:'GET',
+            uri:recipe_sites[index].replace("QUERY",query)
+        };
+        request(options, (error, response, html) => {
         //yay, inline lambdas!
         if (!error && response.statusCode==200)
         {
@@ -30,6 +54,7 @@ function ParseRootPage(query, index)
             {
                 case 0:
                     const block = $('div[class="postgrid clearfix"] ul').first();
+                    var recipes = [];
                     block.find("li > div > a").each(function (index2, element)
                     {
                         let title = $(element).text();
@@ -38,10 +63,11 @@ function ParseRootPage(query, index)
                             //no videos, we don't wanna parse them :)
                             //now parse the recipe's actual HREF and get our recipe info from this
                             let href = $(element).attr('href');
-                            console.log(href);
-                            console.log(ParseRecipePage(href, index));
+                            //console.log(href);
+                            recipes.push(ParseRecipePage(href, index));
                         }
                     })
+                    resolve(recipes);
                     break;
                 case 1:break;
                 case 2:break;
@@ -51,13 +77,23 @@ function ParseRootPage(query, index)
                     console.log("Outside of programmed cases! ERROR"); break;
             }
         }
-    })
+        else
+        {
+            reject(error);
+        }
+    });
+})
 }
 
 function ParseRecipePage(href, index)
 {
     //this is the fun part, especially when the website is programmed not great
-    request({method:'GET', uri:href}, (error, response, html) => {
+    return new Promise((resolve, reject) => {
+        var options = {
+            method:'GET',
+            uri:href
+        };
+        request(options, (error, response, html) => {
         //yay, inline lambdas!
         if (!error && response.statusCode==200)
         {
@@ -66,34 +102,17 @@ function ParseRecipePage(href, index)
             switch (index)
             {
                 case 0:
-                    var block = $('h2:contains("Ingredients")');
-                    if (block.text() == "")
+                    //let's try something more efficient :)
+                    var bl2 = $('script[type="application/ld+json"]');
+                    var json = JSON.parse(bl2.text());
+                    jsondata = json["@graph"][7];
+                    //console.log(jsondata);
+                    //TODO: this data has a ton in it, like difficulty, price, etc
+                    //for now, only grab ingredients, but in the future it might be cool to integrate more of this :)
+                    if (jsondata["@type"] == "Recipe")
                     {
-                        //uh oh! they switched to an h3 for this one
-                        //perform the search again, with an h3
-                        block = $('h3:contains("Ingredients")');
-                    }
-                    console.log("Url for this one was " + href);
-                    console.log(block.text());
-                    console.log(block.next().text());
-                    var ingredients = block.next().text();
-                    //now, we need to parse these ingredients
-                    //works for everything but dashes:
-                    //\d?((\/| ){1}\d{1,2}){0,2}
-                    //works for everything when newlines are enforced per item:
-                    //^\d{1,3}(\/\d{1,3}| \d{1,3}\/\d{1,3}|-\d{1,3})?
-                    //actual final version:
-                    //\n(\d{1,3}(?:\/\d{1,3}| \d{1,3}\/\d{1,3}|-\d{1,3})?)
-                    //this doesn't work the way I expected, it's actually splitting around instead of chopping at the match
-                    //so let's be simpler and just split it at the newlines with a lookahead
-                    const regex = new RegExp('\\n(\\d{1,3}(?:\\/\\d{1,3}| \\d{1,3}\\/\\d{1,3}|-\\d{1,3})?)');
-                    const regex2 = new RegExp('\\n(?=\\d+)');
-                    ingredients = ingredients.split(regex2);
-                    //TODO: Figure out how to determine if an ingredients list is parsed bad programmatically
-                    for (var x = 0; x < ingredients.length; x++)
-                    {
-                        //cleaned ingredients
-                        console.log(ingredients[x].replace("\\n",""));
+                        //solid recipe catch, return ingredients
+                        resolve({'ingredients':jsondata["recipeIngredient"], 'image':jsondata["image"][0], 'title':jsondata['name'],'desc':jsondata['description']});
                     }
                     break;
                 case 1:break;
@@ -104,6 +123,11 @@ function ParseRecipePage(href, index)
                     console.log("Outside of programmed cases! ERROR"); break;
             }
         }
-    })  
+        else
+        {
+            reject(error);
+        }
+    }); 
+}) 
 }
 
